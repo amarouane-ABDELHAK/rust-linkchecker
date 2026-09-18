@@ -80,6 +80,22 @@ impl Stub {
     }
 }
 
+/// What the crawler asked for, as the server saw it.
+pub struct Request {
+    pub method: String,
+    pub path: String,
+    /// Header names lowercased.
+    pub headers: HashMap<String, String>,
+}
+
+impl Request {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(&name.to_ascii_lowercase())
+            .map(String::as_str)
+    }
+}
+
 /// Serve `routes`, answering anything unlisted with a 404. Returns once the
 /// socket is bound, so tests can use the address immediately.
 pub fn serve(routes: HashMap<String, Reply>) -> Stub {
@@ -89,6 +105,14 @@ pub fn serve(routes: HashMap<String, Reply>) -> Stub {
 pub fn serve_with<F>(handler: F) -> Stub
 where
     F: Fn(&str) -> Option<Reply> + Send + Sync + 'static,
+{
+    serve_requests(move |request| handler(&request.path))
+}
+
+/// Like `serve_with`, for servers whose answer depends on more than the path.
+pub fn serve_requests<F>(handler: F) -> Stub
+where
+    F: Fn(&Request) -> Option<Reply> + Send + Sync + 'static,
 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     let addr = listener.local_addr().expect("addr");
@@ -117,18 +141,29 @@ where
 
 fn answer<F>(mut stream: TcpStream, handler: &F, hits: &Mutex<Vec<String>>) -> std::io::Result<()>
 where
-    F: Fn(&str) -> Option<Reply> + Send + Sync + ?Sized,
+    F: Fn(&Request) -> Option<Reply> + Send + Sync + ?Sized,
 {
     let mut buffer = [0_u8; 8192];
     let read = stream.read(&mut buffer)?;
-    let request = String::from_utf8_lossy(&buffer[..read]);
-    let mut parts = request.split_whitespace();
+    let raw = String::from_utf8_lossy(&buffer[..read]);
+    let mut lines = raw.lines();
+    let mut parts = lines.next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("GET").to_string();
     let path = parts.next().unwrap_or("/").to_string();
+    let headers = lines
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.trim().to_ascii_lowercase(), value.trim().to_string()))
+        .collect();
+    let request = Request {
+        method: method.clone(),
+        path: path.clone(),
+        headers,
+    };
 
     hits.lock().unwrap().push(path.clone());
 
-    let reply = handler(&path).unwrap_or_else(|| Reply::status(404));
+    let reply = handler(&request).unwrap_or_else(|| Reply::status(404));
     let body = if method == "HEAD" { "" } else { &reply.body };
     let mut response = format!(
         "HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",

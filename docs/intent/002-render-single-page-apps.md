@@ -139,6 +139,11 @@ Everything in `vision.md` still applies. For this task specifically:
     resolving websocket URL" and fell back to the markup. The launch timeout
     is its own constant, 60 seconds, paid once per run and only when a page
     needs rendering. The per-request timeout is unchanged.
+  - Found after v0.2.1, unrelated to rendering but recorded here so it is
+    not lost: the HTTP client sent `Accept: */*`, its default, and a Rails
+    site (earth.jpl.nasa.gov) answers 404 to that while answering 200 to a
+    browser's `Accept: text/html,...`. The client now sends the browser
+    value on every request. One-line fix, no intent note of its own.
 - Known gotchas discovered while scoping:
   - `Html::parse_document` in `extract` cannot run scripts, so "no in-scope
     links in the markup" is the only signal available before rendering.

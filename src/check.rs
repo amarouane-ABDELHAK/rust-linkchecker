@@ -61,8 +61,19 @@ pub struct Fetched {
     pub html: Option<String>,
 }
 
+/// What a browser asks for. Some servers pick the response by this header
+/// and answer 404 to the `*/*` HTTP clients send by default, so the checker
+/// asks the way a visitor's browser does.
+pub const ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
 pub fn client() -> Result<Client, reqwest::Error> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static(ACCEPT),
+    );
     Client::builder()
+        .default_headers(headers)
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
         .user_agent(concat!("rust-linkchecker/", env!("CARGO_PKG_VERSION")))
