@@ -6,7 +6,7 @@ broken. Built to sit in a GitHub Actions workflow straight after a deployment.
 ## Use it in a workflow
 
 ```yaml
-- uses: amarouane-ABDELHAK/rust-linkchecker@v1
+- uses: amarouane-ABDELHAK/rust-linkchecker@v0.1.0
   with:
     base-url: https://example.com/start
 ```
@@ -73,7 +73,9 @@ cargo build --release
 
 Releases are cut by pushing a `v*` tag: CI builds a statically linked
 `x86_64-unknown-linux-musl` binary and attaches it to the release, which is
-what `action.yml` downloads.
+what `action.yml` downloads. The tag a workflow references with `uses:` must
+have a release of exactly that name — so pin an exact version rather than a
+moving major tag, unless you also republish the asset when the tag moves.
 
 ## License
 
