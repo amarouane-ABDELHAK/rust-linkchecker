@@ -1,7 +1,7 @@
 # Intent: v1 link checker, shipped as a GitHub Action
 
-Status: draft
-Agreed with: <reviewer/maintainer>
+Status: accepted
+Agreed with: Abdelhak Marouane
 Date: 2026-09-18
 
 ## Layer 1 — human-owned, code-free
