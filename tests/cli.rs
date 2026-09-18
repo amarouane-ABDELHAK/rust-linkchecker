@@ -378,3 +378,50 @@ fn a_page_that_only_answers_requests_for_html_is_alive() {
     assert_eq!(output.status.code(), Some(0), "{report}");
     assert!(report.contains("No broken links."), "{report}");
 }
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+/// While the crawl runs, stderr says where it is: one line per crawled page
+/// and a summary every few seconds naming a URL still in flight. The report
+/// on stdout is untouched.
+#[test]
+fn progress_goes_to_stderr_and_names_a_stalled_link() {
+    let site = serve({
+        let mut routes = HashMap::new();
+        routes.insert(
+            "/start/".to_string(),
+            Reply::html(r#"<a href="/start/about">about</a><a href="/start/slow">slow</a>"#),
+        );
+        routes.insert("/start/about".to_string(), Reply::html("<p>about</p>"));
+        routes.insert("/start/slow".to_string(), Reply::stalled());
+        routes
+    });
+
+    let output = run(&site.url("/start/"));
+    let progress = stderr(&output);
+    let report = stdout(&output);
+
+    // one line per crawled page, with its link count
+    assert!(
+        progress.contains(&format!("page {} (2 links)", site.url("/start/"))),
+        "{progress}"
+    );
+    assert!(
+        progress.contains(&format!("page {} (0 links)", site.url("/start/about"))),
+        "{progress}"
+    );
+    // a summary during the stall names the link being waited on
+    let summary = progress
+        .lines()
+        .find(|line| line.contains("pages,") && line.contains("queued"))
+        .unwrap_or_else(|| panic!("no summary line:\n{progress}"));
+    assert!(summary.contains(&site.url("/start/slow")), "{summary}");
+
+    // stdout is the report and nothing else
+    assert!(report.starts_with("Checking links under"), "{report}");
+    assert!(!report.contains("page "), "{report}");
+    assert!(report.contains("timeout"), "{report}");
+    assert_eq!(output.status.code(), Some(1), "{report}");
+}

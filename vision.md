@@ -72,7 +72,8 @@ not invoke it by hand: they add this repository's Action to a workflow with
 
 Version one takes a single starting path and checks the links on every subpath
 beneath it. The output stays deliberately small: the first 100 broken links plus
-a total count.
+a total count. Progress while the crawl runs goes to the error stream, so the
+report a workflow or a person reads on standard output stays that small.
 
 It stays internal to the organization — there is no plan to publish it, so no
 external API or distribution surface needs protecting.

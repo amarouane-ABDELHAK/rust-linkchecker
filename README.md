@@ -38,6 +38,11 @@ linkchecker https://example.com/start
 
 Exit codes: `0` everything alive, `1` something broken, `2` it could not start.
 
+While it runs, progress goes to stderr: one line per page crawled, and every
+five seconds a summary with the counts so far and the oldest link still in
+flight, so a stall points at the host causing it. The report on stdout is
+unaffected, so `2>/dev/null` gives you the report alone.
+
 ## What it does
 
 - Crawls every page **underneath the starting path**. Given
