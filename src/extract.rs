@@ -40,6 +40,9 @@ pub fn links(html: &str, base: &Url) -> Vec<Link> {
     ] {
         let selector = Selector::parse(selector).expect("static selector");
         for element in document.select(&selector) {
+            if is_connection_hint(element.value()) {
+                continue;
+            }
             if let Some(value) = element.value().attr(attribute) {
                 if let Ok(url) = base.join(value.trim()) {
                     if crate::scope::is_checkable(&url) {
@@ -50,6 +53,22 @@ pub fn links(html: &str, base: &Url) -> Vec<Link> {
         }
     }
     found
+}
+
+/// `<link rel="preconnect">` and `<link rel="dns-prefetch">` name an origin
+/// the browser should warm a connection to. Nothing is fetched from the
+/// `href`, whose path is meaningless and usually `/`, so it is not a link.
+fn is_connection_hint(element: &scraper::node::Element) -> bool {
+    element.name() == "link"
+        && element
+            .attr("rel")
+            .map(|rel| {
+                rel.split_ascii_whitespace().any(|token| {
+                    token.eq_ignore_ascii_case("preconnect")
+                        || token.eq_ignore_ascii_case("dns-prefetch")
+                })
+            })
+            .unwrap_or(false)
 }
 
 /// Whether the page runs any script at all. A page without one cannot grow
@@ -156,6 +175,25 @@ mod tests {
         ));
         assert!(runs_script("<script>document.write('x')</script>"));
         assert!(!runs_script("<html><body><p>bottom</p></body></html>"));
+    }
+
+    #[test]
+    fn connection_hints_are_not_links() {
+        // preconnect and dns-prefetch name an origin to warm up, not a
+        // resource to fetch; their path is meaningless and often "/".
+        let found = links_of(
+            r#"<link rel="preconnect" href="/" crossorigin>
+               <link rel="dns-prefetch" href="https://fonts.gstatic.com/">
+               <link rel="preload" as="image" href="/start/logo.svg">
+               <link rel="stylesheet" href="/start/main.css">"#,
+        );
+        assert_eq!(
+            found,
+            vec![
+                "https://example.com/start/logo.svg",
+                "https://example.com/start/main.css"
+            ]
+        );
     }
 
     #[test]
