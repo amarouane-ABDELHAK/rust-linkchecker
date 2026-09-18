@@ -145,3 +145,41 @@ where
     stream.write_all(response.as_bytes())?;
     stream.flush()
 }
+
+/// The names the checker looks for on `PATH`, in the same order. Tests that
+/// need a real browser skip themselves when none is present.
+pub const BROWSER_NAMES: &[&str] = &[
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+    "chrome",
+];
+
+pub fn browser_on_path() -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path)
+        .any(|dir| BROWSER_NAMES.iter().any(|name| dir.join(name).is_file()))
+}
+
+/// A shell page whose links exist only after its script has run: one
+/// in-scope anchor per route, inserted by JavaScript. This is what a
+/// single-page app looks like to a crawler.
+pub fn shell(routes: &[&str]) -> Reply {
+    let inserts: String = routes
+        .iter()
+        .map(|route| {
+            format!(
+                r#"var a = document.createElement('a'); a.href = '{route}'; a.textContent = '{route}'; document.getElementById('root').appendChild(a);"#
+            )
+        })
+        .collect();
+    Reply::html(format!(
+        r#"<!doctype html><html><head><title>app</title></head>
+           <body><div id="root"></div>
+           <script>window.setTimeout(function () {{ {inserts} }}, 50);</script>
+           </body></html>"#
+    ))
+}

@@ -14,6 +14,12 @@ pub const MAX_LISTED: usize = 100;
 /// [`MAX_LISTED`], but the count is always the true one.
 pub fn render(report: &Report) -> String {
     let mut out = String::new();
+    if let Some(reason) = &report.render_unavailable {
+        let _ = writeln!(
+            out,
+            "Rendering unavailable: {reason}.\nPages whose links are built by JavaScript were checked as served.\n"
+        );
+    }
     let _ = writeln!(
         out,
         "Checked {} {} across {} {}.",
@@ -92,6 +98,7 @@ mod tests {
             broken: vec![],
             links_checked: 12,
             pages_crawled: 3,
+            render_unavailable: None,
         };
         let out = render(&report);
         assert!(out.contains("Checked 12 links across 3 pages."));
@@ -105,6 +112,7 @@ mod tests {
             broken: broken(1),
             links_checked: 5,
             pages_crawled: 1,
+            render_unavailable: None,
         };
         let out = render(&report);
         assert!(out.contains("404  https://example.com/dead/0"));
@@ -118,6 +126,7 @@ mod tests {
             broken: broken(127),
             links_checked: 412,
             pages_crawled: 38,
+            render_unavailable: None,
         };
         let out = render(&report);
         assert!(out.contains("BROKEN (127 total, showing first 100):"));
@@ -136,6 +145,7 @@ mod tests {
             }],
             links_checked: 1,
             pages_crawled: 0,
+            render_unavailable: None,
         };
         let out = render(&report);
         assert!(out.contains("DNS  https://example.com/start"));

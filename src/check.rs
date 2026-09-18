@@ -23,6 +23,8 @@ pub enum Failure {
     Connect,
     /// The link redirected in circles, or too far.
     TooManyRedirects,
+    /// The page answered, but the browser could not render it.
+    Render(String),
     /// Anything else that stopped the request from completing.
     Other(String),
 }
@@ -36,6 +38,7 @@ impl Failure {
             Failure::Dns => "DNS".to_string(),
             Failure::Connect => "refused".to_string(),
             Failure::TooManyRedirects => "redirects".to_string(),
+            Failure::Render(_) => "render".to_string(),
             Failure::Other(_) => "error".to_string(),
         }
     }
@@ -43,7 +46,7 @@ impl Failure {
     /// The detail line, when there is more to say than the label.
     pub fn detail(&self) -> Option<&str> {
         match self {
-            Failure::Other(message) => Some(message),
+            Failure::Other(message) | Failure::Render(message) => Some(message),
             _ => None,
         }
     }
@@ -183,6 +186,7 @@ mod tests {
         assert_eq!(Failure::Timeout.label(), "timeout");
         assert_eq!(Failure::Dns.label(), "DNS");
         assert_eq!(Failure::TooManyRedirects.label(), "redirects");
+        assert_eq!(Failure::Render("x".into()).label(), "render");
     }
 
     #[test]

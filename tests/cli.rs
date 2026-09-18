@@ -243,3 +243,111 @@ fn an_unreachable_start_url_is_reported_not_panicked() {
     assert_eq!(output.status.code(), Some(1), "{report}");
     assert!(report.contains("the starting URL"), "{report}");
 }
+
+fn run_with_path(url: &str, path: &std::path::Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_linkchecker"))
+        .arg(url)
+        .env("PATH", path)
+        .output()
+        .expect("run linkchecker")
+}
+
+/// A site whose shell links to nothing, but whose script inserts anchors to
+/// three in-scope pages, one of them dead.
+fn spa() -> Stub {
+    serve({
+        let mut routes = HashMap::new();
+        routes.insert(
+            "/app/".to_string(),
+            common::shell(&["/app/one", "/app/two", "/app/dead"]),
+        );
+        routes.insert(
+            "/app/one".to_string(),
+            Reply::html(r#"<a href="/app/one/leaf">leaf</a>"#),
+        );
+        routes.insert("/app/one/leaf".to_string(), Reply::html("<p>leaf</p>"));
+        routes.insert("/app/two".to_string(), Reply::html("<p>two</p>"));
+        // /app/dead is absent: 404.
+        routes
+    })
+}
+
+#[test]
+fn a_single_page_app_is_rendered_and_its_routes_crawled() {
+    if !common::browser_on_path() {
+        eprintln!("skipped: no Chrome or Chromium on PATH");
+        return;
+    }
+    let site = spa();
+    let output = run(&site.url("/app/"));
+    let report = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(1), "{report}");
+    assert!(report.contains(&site.url("/app/dead")), "{report}");
+    let dead = report
+        .lines()
+        .position(|line| line.contains(&site.url("/app/dead")))
+        .unwrap();
+    assert!(
+        report
+            .lines()
+            .nth(dead + 1)
+            .unwrap()
+            .contains(&format!("linked from {}", site.url("/app/"))),
+        "{report}"
+    );
+    // a page reached only through a rendered link, then through plain markup
+    assert!(site.was_hit("/app/one/leaf"), "{:?}", site.hits());
+    assert!(
+        !report.contains("Chrome"),
+        "no complaint about rendering:\n{report}"
+    );
+}
+
+#[test]
+fn a_plain_site_never_starts_a_browser() {
+    // A fake browser on PATH that leaves a marker if anything launches it.
+    let dir = std::env::temp_dir().join(format!("linkchecker-fake-browser-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = dir.join("launched");
+    let fake = dir.join("google-chrome");
+    std::fs::write(
+        &fake,
+        // A shell builtin, because the test runs with PATH pointing only here.
+        format!("#!/bin/sh\n: > '{}'\nexit 1\n", marker.display()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let (main, _external) = fixture();
+    let output = run_with_path(&main.url("/start/"), &dir);
+    let report = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(1), "{report}");
+    assert!(report.contains("Error: 4 broken links"), "{report}");
+    assert!(
+        !marker.exists(),
+        "the browser was launched for a plain site"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn without_a_browser_a_single_page_app_is_checked_as_served_and_says_so() {
+    let empty = std::env::temp_dir().join(format!("linkchecker-no-browser-{}", std::process::id()));
+    std::fs::create_dir_all(&empty).unwrap();
+
+    let site = spa();
+    let output = run_with_path(&site.url("/app/"), &empty);
+    let report = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(report.contains("no Chrome or Chromium"), "{report}");
+    assert!(report.contains("across 1 page."), "{report}");
+    assert!(!site.was_hit("/app/one"), "{:?}", site.hits());
+    let _ = std::fs::remove_dir_all(&empty);
+}
