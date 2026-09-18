@@ -38,6 +38,20 @@ linkchecker https://example.com/start
 
 Exit codes: `0` everything alive, `1` something broken, `2` it could not start.
 
+## Use it from Docker
+
+To see a site the way a visitor on your own network sees it, for example when
+a firewall answers GitHub's runners differently than it answers you:
+
+```
+docker build -t linkchecker .
+docker run --rm --shm-size=1g linkchecker https://example.com/start
+```
+
+The image builds from source for your CPU and ships Debian's Chromium, so
+single-page apps render with no extra setup. `--shm-size=1g` matters: Docker's
+default 64 MB of shared memory is too little for Chromium.
+
 ## What it does
 
 - Crawls every page **underneath the starting path**. Given

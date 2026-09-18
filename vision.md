@@ -60,6 +60,11 @@ not invoke it by hand: they add this repository's Action to a workflow with
   download one. GitHub-hosted Ubuntu runners have Google Chrome preinstalled;
   a runner without it gets a clear message and rendering is skipped, not a
   crash.
+- **A local Docker image is the one other way to run it.** The `Dockerfile`
+  exists so a developer can see a site from their own network when a firewall
+  or rate limit answers GitHub's runners differently. It is a diagnostic aid
+  with the same binary and the same output, not a second distribution: no
+  registry, no published image, no image-specific inputs.
 - **Solo maintainer.** Design for one person to hold the whole thing in their
   head.
 - **Earlier is better.** Shipping something that works beats shipping something
