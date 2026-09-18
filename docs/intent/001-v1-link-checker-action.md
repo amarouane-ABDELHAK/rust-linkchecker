@@ -31,6 +31,10 @@ A command-line tool takes one starting URL and crawls the site from there.
   it**, so the developer knows what to edit without re-crawling. It prints the
   first 100 and states the true total.
 - The tool exits non-zero when anything is broken, so the workflow goes red.
+- Fixed behavior, not configurable: a 10-second request timeout, 16 requests in
+  flight, non-HTTP schemes (`mailto:`, `tel:`, `javascript:`, `data:`) skipped
+  silently, and fragments dropped when deciding whether two links are the same
+  URL. `/page` and `/page#intro` are one request; `/page` and `/page/` are two.
 
 The same repository ships the Action itself: an `action.yml` taking the
 starting URL as an input, and a release workflow producing the Linux x86_64
@@ -64,24 +68,11 @@ this task specifically:
 - No reporting of anything that is not a broken link. Slow pages, redirect
   chains, and mixed content are out of scope for v1.
 
-### Open questions
+## Layer 2 — implementation sketch (as of 828dfd1)
 
-- **This directory is not a git repository yet.** Releases and `uses:` both
-  require one, so it has to be created and pushed before the Action half can be
-  finished or tested.
-- What request timeout counts as a failure, and how many requests run at once.
-  Both are fixed values, not inputs — but the values need picking, and a crawl
-  slow enough to time out a workflow is its own kind of broken.
-- What to do with non-HTTP schemes found in markup — `mailto:`, `tel:`,
-  `javascript:`, `data:`. Skipping them silently is the assumption; say so if
-  you want them reported instead.
-- Whether URLs that differ only by fragment (`#section`) or trailing slash
-  count as one link for deduplication.
-
-## Layer 2 — implementation sketch (no commit to pin: empty repository)
-
-The tree has no source yet, so there is nothing to pin and nothing to go stale.
-Re-check this section only if the repository gains code before work starts.
+At that commit the tree holds only the playbook files — no Rust source, no
+workflows. Everything below is new code, so there is nothing here to go stale
+except the plan itself.
 
 - Rough plan: one binary crate. A work queue seeded with the start URL; each
   page fetched, parsed for links, in-prefix HTML pages pushed back onto the

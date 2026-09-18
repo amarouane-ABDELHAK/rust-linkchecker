@@ -1,0 +1,25 @@
+[package]
+name = "rust-linkchecker"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Crawls a site from a starting URL and reports broken links"
+repository = "https://github.com/amarouane-ABDELHAK/rust-linkchecker"
+
+[[bin]]
+name = "linkchecker"
+path = "src/main.rs"
+
+[dependencies]
+futures = "0.3"
+scraper = "0.20"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+url = "2"
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["rustls-tls", "gzip"]
+
+[profile.release]
+strip = true
