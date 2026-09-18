@@ -43,4 +43,6 @@ runs:
         # Passed through the environment, never interpolated into the script:
         # a URL is untrusted input and ${{ }} inside run: is a shell injection.
         BASE_URL: ${{ inputs.base-url }}
-      run: "${RUNNER_TEMP}/linkchecker" "${BASE_URL}"
+      run: |
+        set -euo pipefail
+        "${RUNNER_TEMP}/linkchecker" "${BASE_URL}"
