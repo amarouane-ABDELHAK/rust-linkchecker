@@ -6,7 +6,7 @@ mod common;
 use std::collections::HashMap;
 use std::process::{Command, Output};
 
-use common::{serve, serve_with, Reply, Stub};
+use common::{serve, serve_requests, serve_with, Reply, Stub};
 
 fn run(url: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_linkchecker"))
@@ -350,4 +350,31 @@ fn without_a_browser_a_single_page_app_is_checked_as_served_and_says_so() {
     assert!(report.contains("across 1 page."), "{report}");
     assert!(!site.was_hit("/app/one"), "{:?}", site.hits());
     let _ = std::fs::remove_dir_all(&empty);
+}
+
+/// Some servers pick the response by the `Accept` header and answer 404 to
+/// `*/*`, which HTTP clients send by default, while a browser asking for
+/// HTML gets the page. The checker must ask the way a browser does.
+#[test]
+fn a_page_that_only_answers_requests_for_html_is_alive() {
+    let site = serve_requests(|request| match request.path.as_str() {
+        "/picky/" => Some(Reply::html(r#"<a href="/picky/rails">rails</a>"#)),
+        "/picky/rails" => {
+            let wants_html = request
+                .header("accept")
+                .map(|accept| accept.contains("text/html"))
+                .unwrap_or(false);
+            Some(if wants_html {
+                Reply::html("<p>served</p>")
+            } else {
+                Reply::status(404)
+            })
+        }
+        _ => None,
+    });
+
+    let output = run(&site.url("/picky/"));
+    let report = stdout(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(report.contains("No broken links."), "{report}");
 }
