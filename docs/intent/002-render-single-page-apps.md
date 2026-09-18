@@ -132,6 +132,13 @@ Everything in `vision.md` still applies. For this task specifically:
     the first completion criterion, more than one page crawled there, is not
     reachable without clicking or logging in, both non-goals. The stub-server
     tests prove the rendering path; that site does not exercise it further.
+  - Found after the v0.2.0 release: a cold first start of Chrome on a fresh
+    GitHub runner takes about eleven seconds (a warm one, about one). With
+    the browser's launch timeout set to the 10-second request timeout, the
+    consumer's first real run reported "Rendering unavailable: Timeout while
+    resolving websocket URL" and fell back to the markup. The launch timeout
+    is its own constant, 60 seconds, paid once per run and only when a page
+    needs rendering. The per-request timeout is unchanged.
 - Known gotchas discovered while scoping:
   - `Html::parse_document` in `extract` cannot run scripts, so "no in-scope
     links in the markup" is the only signal available before rendering.
