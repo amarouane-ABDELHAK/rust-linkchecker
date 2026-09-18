@@ -21,6 +21,10 @@ use crate::check::{Failure, TIMEOUT};
 /// How many pages render at once. Tabs are far heavier than requests, and
 /// the runners this runs on have two cores.
 pub const RENDER_CONCURRENCY: usize = 4;
+/// How long the browser may take to start. A cold first start on a fresh
+/// GitHub runner takes around eleven seconds, so the per-request timeout is
+/// far too short here. Paid once per run, and only when rendering is needed.
+pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long the set of links on a page must stop changing before it counts
 /// as finished loading.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -77,7 +81,7 @@ impl Renderer {
             // needs; the pages we render are our own.
             .no_sandbox()
             .arg("--disable-gpu")
-            .launch_timeout(TIMEOUT)
+            .launch_timeout(LAUNCH_TIMEOUT)
             .request_timeout(TIMEOUT)
             .build()?;
         let (browser, mut handler) = Browser::launch(config)
