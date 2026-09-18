@@ -1,0 +1,10 @@
+source https://github.com/NASA-IMPACT/dev-collab-playbook.git
+ref    unknown
+date   2026-09-17T21:20:27Z
+superpowers yes
+
+# sha256 of each installed file; tools/bootstrap.sh --check compares
+# against these to tell a local edit from an upstream change.
+docs/intent/TEMPLATE.md c4ce5a693ab19808a6d76cb80c723609543901a2324322ee4cd93766c5f5034b
+docs/decisions/TEMPLATE.md 6025083bece62f358d49d760944b757825b1652bf0d2d2273eae3dee0554dfca
+CLAUDE.md#playbook 913dbd23a33c30c8fef719943c43a8fe41040ede11617a8deb721cd03f95121d
