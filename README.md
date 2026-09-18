@@ -46,7 +46,9 @@ Exit codes: `0` everything alive, `1` something broken, `2` it could not start.
 - Links **outside** that path — other sites, other parts of the same site —
   are checked for liveness and never followed.
 - Checks anchors **and assets**: `<a href>`, `<img src>`, `<script src>`,
-  `<link href>`. A missing image is a broken link.
+  `<link href>`. A missing image is a broken link. `<link rel="preconnect">`
+  and `<link rel="dns-prefetch">` are connection hints, not resources, and
+  are skipped.
 - Treats as broken: any 4xx or 5xx, a timeout, a DNS failure, a refused
   connection, and a redirect loop. Redirects are followed and judged on where
   they land, so a link redirecting to a live page passes.
