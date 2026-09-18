@@ -31,8 +31,11 @@ not invoke it by hand: they add this repository's Action to a workflow with
 
 - **Crawling beyond the starting path prefix.** Off-site and out-of-prefix
   links are checked for liveness but never followed.
-- **JavaScript rendering.** No headless browser; links are found in the
-  markup as served.
+- **Judging a page by what it renders.** A page is alive or dead by its HTTP
+  status, never by what its script painted. On a site that answers every path
+  with a 200 shell, a wrong internal route cannot be caught by this tool.
+- **Interacting with a page.** No clicking, no form filling, no scrolling to
+  reveal more. Links are what the page exposes as links once it has loaded.
 - **Anything beyond link health** — no SEO auditing, accessibility checks,
   spell-checking, or performance measurement.
 - **Authenticated crawling.** No logins, cookies, or private sites.
@@ -53,6 +56,10 @@ not invoke it by hand: they add this repository's Action to a workflow with
   release tags are a maintained public interface: renaming an input or moving a
   tag breaks other repositories' workflows.
 - **Linux x86_64 only.** No macOS, no ARM, no Windows.
+- **Rendering needs a browser on the runner.** The tool does not ship or
+  download one. GitHub-hosted Ubuntu runners have Google Chrome preinstalled;
+  a runner without it gets a clear message and rendering is skipped, not a
+  crash.
 - **Solo maintainer.** Design for one person to hold the whole thing in their
   head.
 - **Earlier is better.** Shipping something that works beats shipping something
@@ -69,6 +76,13 @@ a total count.
 
 It stays internal to the organization — there is no plan to publish it, so no
 external API or distribution surface needs protecting.
+
+Some of the sites we deploy are single-page applications: the markup the server
+sends is an empty shell, and every link on the site exists only after a browser
+has run the script. For those sites the tool renders the page in a headless
+browser and reads the links from the result. Rendering is a fallback, not the
+default: a page whose served markup already yields pages to follow is never
+rendered, so plain sites keep their speed and gain no new dependency.
 
 Growth should come from making that one job more reliable — not from widening
 what the tool does. A change that helps a red build point at the right URL
