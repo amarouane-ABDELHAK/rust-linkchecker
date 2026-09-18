@@ -1,0 +1,46 @@
+name: 'Broken link checker'
+description: 'Crawl a site from a starting URL and fail the run if any link is broken'
+author: 'Abdelhak Marouane'
+
+branding:
+  icon: 'link-2'
+  color: 'red'
+
+inputs:
+  base-url:
+    description: >-
+      The URL to start from. Every page underneath its path is crawled; links
+      outside it are checked but never followed.
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Fetch linkchecker
+      shell: bash
+      env:
+        # The tag this action was referenced with, so the binary always matches
+        # the action.yml that asked for it.
+        REF: ${{ github.action_ref }}
+        REPO: ${{ github.action_repository }}
+        FALLBACK_REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        repo="${REPO:-$FALLBACK_REPO}"
+        if [ -z "${REF:-}" ]; then
+          echo "::error::could not tell which release to download; reference this action by tag" >&2
+          exit 1
+        fi
+        url="https://github.com/${repo}/releases/download/${REF}/linkchecker-x86_64-unknown-linux-musl"
+        echo "downloading ${url}"
+        curl --fail --silent --show-error --location --retry 3 \
+          --output "${RUNNER_TEMP}/linkchecker" "${url}"
+        chmod +x "${RUNNER_TEMP}/linkchecker"
+
+    - name: Check links
+      shell: bash
+      env:
+        # Passed through the environment, never interpolated into the script:
+        # a URL is untrusted input and ${{ }} inside run: is a shell injection.
+        BASE_URL: ${{ inputs.base-url }}
+      run: "${RUNNER_TEMP}/linkchecker" "${BASE_URL}"

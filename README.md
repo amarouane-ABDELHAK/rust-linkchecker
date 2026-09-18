@@ -1,0 +1,80 @@
+# rust-linkchecker
+
+Crawls a deployed site from a starting URL and fails the run if any link is
+broken. Built to sit in a GitHub Actions workflow straight after a deployment.
+
+## Use it in a workflow
+
+```yaml
+- uses: amarouane-ABDELHAK/rust-linkchecker@v1
+  with:
+    base-url: https://example.com/start
+```
+
+The step fails when anything is broken, and prints what and where:
+
+```
+Checked 412 links across 38 pages.
+
+BROKEN (127 total, showing first 100):
+
+        404  https://example.com/start/old-page
+             linked from https://example.com/start/about
+        500  https://api.other.com/v1/status
+             linked from https://example.com/start/docs
+        DNS  https://gone.example.net/
+             linked from https://example.com/start/
+
+Error: 127 broken links
+```
+
+## Use it by hand
+
+The Action runs the same binary you can run yourself:
+
+```
+linkchecker https://example.com/start
+```
+
+Exit codes: `0` everything alive, `1` something broken, `2` it could not start.
+
+## What it does
+
+- Crawls every page **underneath the starting path**. Given
+  `https://example.com/start`, it follows `/start/about` and
+  `/start/guide/deep`, but not `/other` and not `/started`.
+- Links **outside** that path — other sites, other parts of the same site —
+  are checked for liveness and never followed.
+- Checks anchors **and assets**: `<a href>`, `<img src>`, `<script src>`,
+  `<link href>`. A missing image is a broken link.
+- Treats as broken: any 4xx or 5xx, a timeout, a DNS failure, a refused
+  connection, and a redirect loop. Redirects are followed and judged on where
+  they land, so a link redirecting to a live page passes.
+- Requests each distinct URL once, however many pages link to it.
+- Prints the first 100 broken links and always states the true total.
+
+Fixed, deliberately not configurable: a 10-second request timeout, 16 requests
+in flight, `mailto:`/`tel:`/`javascript:`/`data:` links skipped, and `#fragments`
+dropped when deciding whether two links are the same URL.
+
+## What it does not do
+
+No JavaScript rendering, no authenticated crawling, no ignore list, no JSON
+output, no caching between runs, and no fixing of the links it finds. See
+[vision.md](vision.md) for why, and `docs/intent/` for the note each change is
+reviewed against.
+
+## Development
+
+```
+cargo test     # unit tests, plus end-to-end tests against a stub server
+cargo build --release
+```
+
+Releases are cut by pushing a `v*` tag: CI builds a statically linked
+`x86_64-unknown-linux-musl` binary and attaches it to the release, which is
+what `action.yml` downloads.
+
+## License
+
+MIT
