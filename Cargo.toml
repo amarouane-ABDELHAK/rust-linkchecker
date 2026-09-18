@@ -1,6 +1,6 @@
 [package]
 name = "rust-linkchecker"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT"
 description = "Crawls a site from a starting URL and reports broken links"
