@@ -3,6 +3,22 @@
 use scraper::{Html, Selector};
 use url::Url;
 
+/// What kind of reference a link is. Only anchors lead to more pages; the
+/// distinction decides whether a page had anything to follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// `<a href>`: a page, or at least a thing that may be one.
+    Anchor,
+    /// `<img src>`, `<script src>`, `<link href>`: fetched, never followed.
+    Asset,
+}
+
+#[derive(Debug, Clone)]
+pub struct Link {
+    pub url: Url,
+    pub kind: Kind,
+}
+
 /// Every URL referenced by the page, resolved against `base`.
 ///
 /// `base` must be the URL the page was finally served from — after any
@@ -11,29 +27,37 @@ use url::Url;
 /// Anchors and asset references both count: a missing image is a broken link.
 /// References that fail to resolve, or that use a scheme we cannot request,
 /// are dropped here.
-pub fn links(html: &str, base: &Url) -> Vec<Url> {
+pub fn links(html: &str, base: &Url) -> Vec<Link> {
     let document = Html::parse_document(html);
     let base = base_href(&document, base);
 
     let mut found = Vec::new();
-    for (selector, attribute) in [
-        ("a[href]", "href"),
-        ("link[href]", "href"),
-        ("img[src]", "src"),
-        ("script[src]", "src"),
+    for (selector, attribute, kind) in [
+        ("a[href]", "href", Kind::Anchor),
+        ("link[href]", "href", Kind::Asset),
+        ("img[src]", "src", Kind::Asset),
+        ("script[src]", "src", Kind::Asset),
     ] {
         let selector = Selector::parse(selector).expect("static selector");
         for element in document.select(&selector) {
             if let Some(value) = element.value().attr(attribute) {
                 if let Ok(url) = base.join(value.trim()) {
                     if crate::scope::is_checkable(&url) {
-                        found.push(url);
+                        found.push(Link { url, kind });
                     }
                 }
             }
         }
     }
     found
+}
+
+/// Whether the page runs any script at all. A page without one cannot grow
+/// links after it loads, so there is nothing a browser could add.
+pub fn runs_script(html: &str) -> bool {
+    let document = Html::parse_document(html);
+    let selector = Selector::parse("script").expect("static selector");
+    document.select(&selector).next().is_some()
 }
 
 /// A `<base href>` overrides the document's own URL for relative links.
@@ -56,7 +80,10 @@ mod tests {
     }
 
     fn links_of(html: &str) -> Vec<String> {
-        links(html, &base()).into_iter().map(String::from).collect()
+        links(html, &base())
+            .into_iter()
+            .map(|link| String::from(link.url))
+            .collect()
     }
 
     #[test]
@@ -110,6 +137,25 @@ mod tests {
                                 <body><a href="page">p</a></body>"#,
         );
         assert_eq!(found, vec!["https://cdn.example.com/v2/page"]);
+    }
+
+    #[test]
+    fn anchors_and_assets_are_told_apart() {
+        let found = links(
+            r#"<a href="/start/about">a</a><img src="viz.png"><script src="app.js"></script>"#,
+            &base(),
+        );
+        let kinds: Vec<Kind> = found.iter().map(|link| link.kind).collect();
+        assert_eq!(kinds, vec![Kind::Anchor, Kind::Asset, Kind::Asset]);
+    }
+
+    #[test]
+    fn only_pages_with_a_script_can_grow_links() {
+        assert!(runs_script(
+            r#"<div id="root"></div><script src="app.js"></script>"#
+        ));
+        assert!(runs_script("<script>document.write('x')</script>"));
+        assert!(!runs_script("<html><body><p>bottom</p></body></html>"));
     }
 
     #[test]

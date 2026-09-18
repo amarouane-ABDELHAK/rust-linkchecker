@@ -4,6 +4,7 @@
 mod check;
 mod crawl;
 mod extract;
+mod render;
 mod report;
 mod scope;
 
@@ -17,7 +18,8 @@ const USAGE: &str = "usage: linkchecker <url>
 
 Crawls every page underneath <url> and checks the links on them. Links
 outside that path — other sites, other parts of this one — are checked but
-never followed.
+never followed. A page whose markup links to nothing is rendered in the
+Chrome or Chromium found on PATH, so single-page apps are crawled too.
 
 Exits 0 when every link is alive, 1 when any is broken, 2 when it could not
 start.";
