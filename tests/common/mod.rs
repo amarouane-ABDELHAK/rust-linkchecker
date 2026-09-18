@@ -16,6 +16,8 @@ pub struct Reply {
     pub content_type: &'static str,
     pub body: String,
     pub location: Option<String>,
+    /// How long to sit on the request before answering.
+    pub delay: Option<std::time::Duration>,
 }
 
 impl Reply {
@@ -25,6 +27,7 @@ impl Reply {
             content_type: "text/html; charset=utf-8",
             body: body.into(),
             location: None,
+            delay: None,
         }
     }
 
@@ -34,6 +37,7 @@ impl Reply {
             content_type: "image/png",
             body: "\u{89}PNG".to_string(),
             location: None,
+            delay: None,
         }
     }
 
@@ -43,6 +47,7 @@ impl Reply {
             content_type: "text/plain",
             body: format!("{status}"),
             location: None,
+            delay: None,
         }
     }
 
@@ -52,6 +57,15 @@ impl Reply {
             content_type: "text/plain",
             body: String::new(),
             location: Some(to.into()),
+            delay: None,
+        }
+    }
+
+    /// A page that never answers within the crawler's patience.
+    pub fn stalled() -> Reply {
+        Reply {
+            delay: Some(std::time::Duration::from_secs(13)),
+            ..Reply::html("<p>eventually</p>")
         }
     }
 }
@@ -164,6 +178,9 @@ where
     hits.lock().unwrap().push(path.clone());
 
     let reply = handler(&request).unwrap_or_else(|| Reply::status(404));
+    if let Some(delay) = reply.delay {
+        thread::sleep(delay);
+    }
     let body = if method == "HEAD" { "" } else { &reply.body };
     let mut response = format!(
         "HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",

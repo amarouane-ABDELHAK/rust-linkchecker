@@ -1,6 +1,7 @@
 //! Walking the site: what to fetch next, what has been seen, what broke.
 
 use std::collections::{HashSet, VecDeque};
+use std::time::Duration;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
@@ -14,6 +15,8 @@ use crate::scope::{dedup_key, Scope};
 
 /// How many requests are in flight at once.
 pub const CONCURRENCY: usize = 16;
+/// How often a progress summary is printed while the crawl runs.
+pub const PROGRESS_EVERY: Duration = Duration::from_secs(5);
 
 /// A link that failed, and the page that pointed at it.
 #[derive(Debug, Clone)]
@@ -85,16 +88,38 @@ pub async fn crawl(scope: &Scope, client: &Client) -> Report {
     });
 
     let mut inflight = FuturesUnordered::new();
+    // The URLs behind the opaque futures in `inflight`, oldest first, so a
+    // progress summary can name the one most likely to be stalling.
+    let mut working: VecDeque<String> = VecDeque::new();
+    let mut ticker = tokio::time::interval(PROGRESS_EVERY);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    ticker.reset();
+
     loop {
         while inflight.len() < CONCURRENCY {
             let Some(job) = queue.pop_front() else { break };
+            working.push_back(job.url.to_string());
             inflight.push(run(client, scope, &renderer, job));
         }
-
-        let Some(done) = inflight.next().await else {
+        if inflight.is_empty() {
             break;
+        }
+
+        let done = tokio::select! {
+            done = inflight.next() => match done {
+                Some(done) => done,
+                None => break,
+            },
+            _ = ticker.tick() => {
+                progress::summary(&report, queue.len(), working.front());
+                continue;
+            }
         };
         report.links_checked += 1;
+        let url = done.job.url.to_string();
+        if let Some(position) = working.iter().position(|w| *w == url) {
+            working.remove(position);
+        }
 
         match done.outcome {
             Err(failure) => report.broken.push(Broken {
@@ -105,6 +130,7 @@ pub async fn crawl(scope: &Scope, client: &Client) -> Report {
             Ok(None) => {}
             Ok(Some(page)) => {
                 report.pages_crawled += 1;
+                progress::page(&page.final_url, page.links.len());
                 for link in page.links {
                     if !seen.insert(dedup_key(&link.url)) {
                         continue;
@@ -129,6 +155,35 @@ pub async fn crawl(scope: &Scope, client: &Client) -> Report {
         None => {}
     }
     report
+}
+
+/// What the crawl says while it runs. Everything here goes to stderr: the
+/// report on stdout stays exactly what it is, line for line.
+mod progress {
+    use url::Url;
+
+    use super::Report;
+
+    /// One line per page read for links.
+    pub fn page(url: &Url, links: usize) {
+        eprintln!(
+            "page {url} ({links} {})",
+            if links == 1 { "link" } else { "links" }
+        );
+    }
+
+    /// Where the crawl is, and the oldest URL still in flight, which is the
+    /// one most likely to be stalling.
+    pub fn summary(report: &Report, queued: usize, waiting_on: Option<&String>) {
+        let mut line = format!(
+            "... {} pages, {} links checked, {} queued",
+            report.pages_crawled, report.links_checked, queued
+        );
+        if let Some(url) = waiting_on {
+            line.push_str(&format!("; waiting on {url}"));
+        }
+        eprintln!("{line}");
+    }
 }
 
 async fn run(client: &Client, scope: &Scope, renderer: &LazyRenderer, job: Job) -> Done {
