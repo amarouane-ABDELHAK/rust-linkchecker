@@ -144,6 +144,14 @@ Everything in `vision.md` still applies. For this task specifically:
     site (earth.jpl.nasa.gov) answers 404 to that while answering 200 to a
     browser's `Accept: text/html,...`. The client now sends the browser
     value on every request. One-line fix, no intent note of its own.
+  - Found after v0.3.0, thanks to the progress lines: a full crawl of
+    earth.gov/ghgcenter sat for minutes on one URL with nothing else in
+    flight. That URL serves the site's HTML shell, so it was being rendered,
+    and only the load step of a render had a deadline; opening the tab and
+    closing it did not, and Chromium can hang on either. The whole render is
+    now under one 20-second deadline. The hang did not reproduce locally, in
+    Docker or native, so this is a guarantee of progress rather than a fix
+    for whatever Chromium was doing.
 - Known gotchas discovered while scoping:
   - `Html::parse_document` in `extract` cannot run scripts, so "no in-scope
     links in the markup" is the only signal available before rendering.

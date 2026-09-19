@@ -25,6 +25,10 @@ pub const RENDER_CONCURRENCY: usize = 4;
 /// GitHub runner takes around eleven seconds, so the per-request timeout is
 /// far too short here. Paid once per run, and only when rendering is needed.
 pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
+/// The most one page may take to render, opening and closing the tab
+/// included. Chromium can hang on either of those, and an unbounded wait
+/// there stalls the whole crawl on one URL.
+pub const RENDER_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long the set of links on a page must stop changing before it counts
 /// as finished loading.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -111,6 +115,20 @@ impl Renderer {
             .acquire()
             .await
             .map_err(|_| Failure::Render("browser closed".into()))?;
+        // One deadline over everything, so a tab that will not open or will
+        // not close cannot hold the crawl. A tab abandoned by the deadline
+        // stays open in the browser until the run ends; that is cheaper than
+        // waiting on it.
+        match tokio::time::timeout(RENDER_TIMEOUT, self.open_load_close(url)).await {
+            Ok(rendered) => rendered,
+            Err(_) => Err(Failure::Render(format!(
+                "did not finish rendering within {}s",
+                RENDER_TIMEOUT.as_secs()
+            ))),
+        }
+    }
+
+    async fn open_load_close(&self, url: &Url) -> Result<Rendered, Failure> {
         let page = self
             .browser
             .lock()
@@ -118,15 +136,15 @@ impl Renderer {
             .new_page(url.as_str())
             .await
             .map_err(render_error)?;
-        let outcome = tokio::time::timeout(TIMEOUT, load(&page, url)).await;
-        let _ = page.close().await;
-        match outcome {
+        let outcome = match tokio::time::timeout(TIMEOUT, load(&page, url)).await {
             Ok(rendered) => rendered,
             Err(_) => Err(Failure::Render(format!(
                 "did not finish loading within {}s",
                 TIMEOUT.as_secs()
             ))),
-        }
+        };
+        let _ = page.close().await;
+        outcome
     }
 
     pub async fn shutdown(self) {
