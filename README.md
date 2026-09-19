@@ -6,7 +6,7 @@ broken. Built to sit in a GitHub Actions workflow straight after a deployment.
 ## Use it in a workflow
 
 ```yaml
-- uses: amarouane-ABDELHAK/rust-linkchecker@v0.3.0
+- uses: amarouane-ABDELHAK/rust-linkchecker@v0.3.1
   with:
     base-url: https://example.com/start
 ```
