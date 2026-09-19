@@ -468,6 +468,7 @@ fn a_page_whose_load_event_never_fires_still_has_its_links_read() {
     // Sitting out the 20-second render deadline would have put a "render"
     // failure in the report, which is asserted against above; a wall-clock
     // bound on top of that only measures the runner's cold Chrome start.
+}
 
 /// Firewalls with bot rules answer 403 to anything that names itself a
 /// link checker. The checker presents as the browser whose visitors it is
