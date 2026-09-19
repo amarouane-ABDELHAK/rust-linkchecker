@@ -29,9 +29,15 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
 /// included. Chromium can hang on either of those, and an unbounded wait
 /// there stalls the whole crawl on one URL.
 pub const RENDER_TIMEOUT: Duration = Duration::from_secs(20);
-/// How long the set of links on a page must stop changing before it counts
-/// as finished loading.
-const SETTLE: Duration = Duration::from_millis(500);
+/// How long a page must go without a new link or a newly finished network
+/// request before it counts as finished loading, once its load event has
+/// fired. Apps fetch data after load and only then render the links that
+/// depend on it, so this has to outlast a typical fetch.
+const SETTLE: Duration = Duration::from_millis(1500);
+/// The same, while the load event has not fired: a script bundle that is
+/// still downloading adds nothing for a while and then adds everything, so
+/// a quiet spell proves less before load than after it.
+const SETTLE_BEFORE_LOAD: Duration = Duration::from_millis(2500);
 const POLL: Duration = Duration::from_millis(100);
 
 /// Executable names tried on `PATH`, in order.
@@ -129,20 +135,17 @@ impl Renderer {
     }
 
     async fn open_load_close(&self, url: &Url) -> Result<Rendered, Failure> {
+        // A blank tab first: opening a tab straight on `url` waits for the
+        // page's load event, which one hanging image or beacon can hold for
+        // as long as it likes. Navigating afterwards returns at once.
         let page = self
             .browser
             .lock()
             .await
-            .new_page(url.as_str())
+            .new_page("about:blank")
             .await
             .map_err(render_error)?;
-        let outcome = match tokio::time::timeout(TIMEOUT, load(&page, url)).await {
-            Ok(rendered) => rendered,
-            Err(_) => Err(Failure::Render(format!(
-                "did not finish loading within {}s",
-                TIMEOUT.as_secs()
-            ))),
-        };
+        let outcome = load(&page, url).await;
         let _ = page.close().await;
         outcome
     }
@@ -157,24 +160,41 @@ impl Renderer {
 }
 
 async fn load(page: &Page, requested: &Url) -> Result<Rendered, Failure> {
-    page.wait_for_navigation().await.map_err(render_error)?;
+    page.goto(requested.as_str()).await.map_err(render_error)?;
 
-    // "Finished loading" is when the app has stopped adding links. Watching
-    // the link count is framework-neutral and survives long-polling
-    // connections that would keep a network-idle signal from ever firing.
-    let mut last: Option<u64> = None;
+    // "Finished loading" is when the document has been parsed and the app
+    // has stopped adding links. The load event is deliberately not awaited:
+    // it waits for every image and frame, and one hanging beacon can hold
+    // it for longer than the whole crawl. Watching the link count is
+    // framework-neutral and survives long-polling connections too. Past the
+    // deadline, whatever is on the page is what gets checked.
+    // Two signals, both from inside the page: how many links it has, and how
+    // many network requests have finished (resource timing entries). A fetch
+    // in flight shows up as a new entry when it lands, which restarts the
+    // clock before the links it feeds appear.
+    let deadline = Instant::now() + TIMEOUT;
+    let mut last: Option<(u64, u64)> = None;
     let mut stable_since = Instant::now();
-    loop {
-        let count: u64 = page
+    while Instant::now() < deadline {
+        let (state, links, resources): (String, u64, u64) = page
             .evaluate(
-                "document.querySelectorAll('a[href], link[href], img[src], script[src]').length",
+                "[document.readyState, \
+                  document.querySelectorAll('a[href], link[href], img[src], script[src]').length, \
+                  performance.getEntriesByType('resource').length]",
             )
             .await
             .map_err(render_error)?
             .into_value()
             .map_err(|error| Failure::Render(error.to_string()))?;
-        if last == Some(count) {
-            if stable_since.elapsed() >= SETTLE {
+        let parsed = state != "loading";
+        let settle = if state == "complete" {
+            SETTLE
+        } else {
+            SETTLE_BEFORE_LOAD
+        };
+        let count = (links, resources);
+        if parsed && last == Some(count) {
+            if stable_since.elapsed() >= settle {
                 break;
             }
         } else {

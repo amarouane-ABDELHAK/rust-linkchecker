@@ -57,7 +57,9 @@ unaffected, so `2>/dev/null` gives you the report alone.
 - Treats as broken: any 4xx or 5xx, a timeout, a DNS failure, a refused
   connection, and a redirect loop. Redirects are followed and judged on where
   they land, so a link redirecting to a live page passes.
-- Requests each distinct URL once, however many pages link to it.
+- Requests each distinct URL once, however many pages link to it, and
+  presents as a desktop Chrome, because firewalls with bot rules answer 403
+  to anything that names itself a link checker.
 - Renders single-page apps. A page whose markup has a script but no link to
   another page is loaded in the Chrome or Chromium found on `PATH`, and the
   links its script produced are crawled like any others. Plain sites never
