@@ -152,6 +152,24 @@ Everything in `vision.md` still applies. For this task specifically:
     now under one 20-second deadline. The hang did not reproduce locally, in
     Docker or native, so this is a guarantee of progress rather than a fix
     for whatever Chromium was doing.
+  - Found after v0.3.1: the render deadline was firing on pages a browser
+    shows in under a second. Opening a tab on a URL waits for the page's
+    load event, and the load event waits for every image, frame and beacon;
+    one hanging third-party request holds it indefinitely. The tab is now
+    opened blank and navigated, the load event is never awaited, and the
+    links are read once the document is parsed and neither the link count
+    nor the number of finished network requests (resource timing entries)
+    has changed for 1.5 s after load, or 2.5 s before it, or at the 10-second
+    cap with whatever is there. A half-second window was tried first and cut
+    earth.gov/ghgcenter short in a timing-dependent way (122, 105, 79 pages
+    on three runs); with the two signals and the longer windows two runs
+    gave 129 pages and 784 links each.
+    "Render" is now reported only when the browser itself errors, which
+    narrows the Layer 1 sentence "a page that fails to render is broken" to
+    browser failures; a slow page is a page, not a failure.
+  - Found at the same time, outside rendering: noaa.gov's CloudFront rules
+    answer 403 to any User-Agent containing the tool's name while a browser's
+    passes. The client now presents as desktop Chrome (agreed 2026-09-19).
 - Known gotchas discovered while scoping:
   - `Html::parse_document` in `extract` cannot run scripts, so "no in-scope
     links in the markup" is the only signal available before rendering.

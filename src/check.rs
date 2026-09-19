@@ -66,6 +66,12 @@ pub struct Fetched {
 /// asks the way a visitor's browser does.
 pub const ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
+/// What the checker calls itself. A visitor's browser, because that is who
+/// it is standing in for: firewalls with bot rules answer 403 to anything
+/// that names itself a link checker, and a 403 no visitor would see is a
+/// false red.
+pub const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
+
 pub fn client() -> Result<Client, reqwest::Error> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -76,7 +82,7 @@ pub fn client() -> Result<Client, reqwest::Error> {
         .default_headers(headers)
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
-        .user_agent(concat!("rust-linkchecker/", env!("CARGO_PKG_VERSION")))
+        .user_agent(USER_AGENT)
         .build()
 }
 

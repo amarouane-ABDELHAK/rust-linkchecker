@@ -425,3 +425,76 @@ fn progress_goes_to_stderr_and_names_a_stalled_link() {
     assert!(report.contains("timeout"), "{report}");
     assert_eq!(output.status.code(), Some(1), "{report}");
 }
+
+/// A browser's load event waits for every image and frame. A page can have
+/// all its links on screen within a second and still not fire it for ten
+/// seconds because one analytics beacon or map tile hangs. The checker reads
+/// the links once they stop changing and does not wait for load.
+#[test]
+fn a_page_whose_load_event_never_fires_still_has_its_links_read() {
+    if !common::browser_on_path() {
+        eprintln!("skipped: no Chrome or Chromium on PATH");
+        return;
+    }
+    let site = serve({
+        let mut routes = HashMap::new();
+        routes.insert(
+            "/app/".to_string(),
+            Reply::html(
+                r#"<!doctype html><html><body><div id="root"></div>
+                   <img src="/app/never.png">
+                   <script>setTimeout(function () {
+                     var a = document.createElement('a'); a.href = '/app/one'; a.textContent = 'one';
+                     document.getElementById('root').appendChild(a);
+                   }, 50);</script></body></html>"#,
+            ),
+        );
+        routes.insert("/app/never.png".to_string(), Reply::stalled());
+        routes.insert("/app/one".to_string(), Reply::html("<p>one</p>"));
+        routes
+    });
+
+    let started = std::time::Instant::now();
+    let output = run(&site.url("/app/"));
+    let report = stdout(&output);
+
+    // the page rendered, its inserted link was followed, and rendering was
+    // not reported as a failure
+    assert!(site.was_hit("/app/one"), "{:?}\n{report}", site.hits());
+    assert!(!report.contains("render"), "{report}");
+    // the only failure is the image that never answers
+    assert!(report.contains("timeout"), "{report}");
+    assert!(report.contains(&site.url("/app/never.png")), "{report}");
+    assert!(report.contains("Error: 1 broken link"), "{report}");
+    // and the crawl did not sit out the 20-second render deadline on top of
+    // the image's own HEAD and GET timeouts (10 s each)
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(35),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+/// Firewalls with bot rules answer 403 to anything that names itself a
+/// link checker. The checker presents as the browser whose visitors it is
+/// standing in for.
+#[test]
+fn presents_as_a_browser() {
+    let site = serve_requests(|request| match request.path.as_str() {
+        "/ua/" => Some(Reply::html(r#"<a href="/ua/guarded">guarded</a>"#)),
+        "/ua/guarded" => {
+            let agent = request.header("user-agent").unwrap_or("");
+            Some(
+                if agent.starts_with("Mozilla/5.0") && !agent.contains("linkchecker") {
+                    Reply::html("<p>welcome</p>")
+                } else {
+                    Reply::status(403)
+                },
+            )
+        }
+        _ => None,
+    });
+    let output = run(&site.url("/ua/"));
+    let report = stdout(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+}
